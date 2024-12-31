@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrickScore - Admin</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #f0f2f5;
+        }
+
+        .score-header {
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .score-header span {
+            font-size: 32px;
+            margin-right: 20px;
+            font-weight: bold;
+        }
+
+        .this-over {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        h2 {
+            color: #1e3c72;
+            margin-bottom: 15px;
+            font-size: 24px;
+        }
+
+        .balls-container {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .ball {
+            width: 50px;
+            height: 50px;
+            border: 2px solid #e1e4e8;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            background: white;
+            transition: all 0.3s ease;
+        }
+
+        .ball.current {
+            border: 3px solid #1e3c72;
+            background: #f8f9fa;
+            transform: scale(1.1);
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: #1e3c72;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        button.out {
+            background: #dc3545;
+        }
+
+        .over-listings {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .over {
+            background: #f8f9fa;
+            margin-bottom: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e1e4e8;
+        }
+
+        .over h3 {
+            color: #1e3c72;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .over-summary {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .ball[data-runs="4"] {
+            background: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }
+
+        .ball[data-runs="6"] {
+            background: #2196F3;
+            color: white;
+            border-color: #2196F3;
+        }
+
+        .ball[data-runs="W"] {
+            background: #dc3545;
+            color: white;
+            border-color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="score-header">
+        <span id="score">0/0</span>
+        <span id="over">Over: 0.0</span>
+    </div>
+
+    <div class="this-over">
+        <h2>This Over</h2>
+        <div class="balls-container" id="balls">
+            <!-- Balls will be inserted here -->
+        </div>
+        <div class="controls">
+            <button onclick="updateScore(0)">0</button>
+            <button onclick="updateScore(1)">1</button>
+            <button onclick="updateScore(2)">2</button>
+            <button onclick="updateScore(3)">3</button>
+            <button onclick="updateScore(4)">4</button>
+            <button onclick="updateScore(6)">6</button>
+            <button class="out" onclick="updateScore(0, true)">OUT</button>
+        </div>
+    </div>
+
+    <div class="over-listings" id="overs">
+        <h2>Previous Overs</h2>
+        <!-- Over listings will be inserted here -->
+    </div>
+
+    <script>
+        let ws = new WebSocket('ws://localhost:8080');
+        let currentMatch = null;
+
+        function updateScore(runs, isOut = false) {
+            fetch('update_score.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    runs,
+                    isOut,
+                    overNumber: currentMatch.current_over,
+                    ballNumber: currentMatch.current_ball
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    fetchMatchData();
+                }
+            });
+        }
+
+        function fetchMatchData() {
+            fetch('get_match.php')
+                .then(response => response.json())
+                .then(data => {
+                    currentMatch = data;
+                    updateUI(data);
+                });
+        }
+
+        function calculateOverStats(balls) {
+            const runs = balls.reduce((sum, ball) => sum + ball.runs, 0);
+            const wickets = balls.filter(ball => ball.is_out).length;
+            return { runs, wickets };
+        }
+
+        function updateUI(match) {
+            document.getElementById('score').textContent = `${match.current_score}/${match.wickets}`;
+            document.getElementById('over').textContent = `Over: ${match.current_over}.${match.current_ball}`;
+            
+            const ballsHtml = Array(6).fill(0).map((_, i) => {
+                const ball = match.balls.find(b => b.over_number === match.current_over && b.ball_number === i);
+                const value = ball ? (ball.is_out ? 'W' : ball.runs) : '';
+                const current = i === match.current_ball ? 'current' : '';
+                return `<div class="ball ${current}" data-runs="${value}">${value}</div>`;
+            }).join('');
+            document.getElementById('balls').innerHTML = ballsHtml;
+
+            // Update over listings
+            const oversMap = match.balls.reduce((acc, ball) => {
+                if (!acc[ball.over_number]) acc[ball.over_number] = [];
+                acc[ball.over_number].push(ball);
+                return acc;
+            }, {});
+
+            const oversHtml = Object.entries(oversMap)
+                .sort((a, b) => b[0] - a[0]) // Sort in descending order
+                .map(([overNum, balls]) => {
+                    const stats = calculateOverStats(balls);
+                    return `
+                        <div class="over">
+                            <h3>Over ${overNum}</h3>
+                            <div class="balls-container">
+                                ${balls
+                                    .sort((a, b) => a.ball_number - b.ball_number)
+                                    .map(ball => `
+                                        <div class="ball" data-runs="${ball.is_out ? 'W' : ball.runs}">
+                                            ${ball.is_out ? 'W' : ball.runs}
+                                        </div>
+                                    `).join('')}
+                            </div>
+                            <div class="over-summary">
+                                <span>Runs: ${stats.runs}</span>
+                                <span>Wickets: ${stats.wickets}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            document.getElementById('overs').innerHTML = `
+                <h2>Previous Overs</h2>
+                ${oversHtml}
+            `;
+        }
+
+        // Initial load
+        fetchMatchData();
+
+        // Setup WebSocket
+        ws.onmessage = function(event) {
+            const match = JSON.parse(event.data);
+            updateUI(match);
+        };
+    </script>
+</body>
+</html>
